@@ -18,16 +18,6 @@ PHP + CSS + JavaScript internal AirForShare-style app.
 3. In Firebase Console, enable **Cloud Firestore**.
 4. Add the Firestore rules from the ChatGPT response or your own authenticated rules.
 
-## Login
-
-- Default email: `admin@airforshare.local`
-- Default password: `AirForShare@2026`
-- Override them with `AIRFORSHARE_LOGIN_EMAIL` and `AIRFORSHARE_LOGIN_PASSWORD` on the server.
-
-## Firestore paths used
-
-- `internal_share/text`
-- `internal_share/attachments/items/{fileId}`
 
 ## Important
 
