@@ -1,5 +1,8 @@
 <?php
+require_once __DIR__ . '/auth.php';
+
 header('Content-Type: application/json');
+airforshare_require_auth_json();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);

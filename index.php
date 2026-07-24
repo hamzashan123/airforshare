@@ -1,8 +1,31 @@
 <?php
+require_once __DIR__ . '/auth.php';
+
 // Internal AirForShare-style app
 // 1) Put this folder on a PHP-enabled server.
 // 2) Make assets/uploads writable by PHP.
 // 3) Add your Firebase Realtime Database config inside assets/app.js.
+$loginError = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'login') {
+        if (airforshare_attempt_login($_POST['email'] ?? '', $_POST['password'] ?? '')) {
+            header('Location: ' . $_SERVER['PHP_SELF']);
+            exit;
+        }
+        $loginError = 'Invalid email or password.';
+    }
+
+    if ($action === 'logout') {
+        airforshare_logout();
+        header('Location: ' . $_SERVER['PHP_SELF']);
+        exit;
+    }
+}
+
+$isAuthenticated = airforshare_is_authenticated();
 ?>
 <!doctype html>
 <html lang="en">
@@ -12,7 +35,7 @@
   <title>AirShare Internal</title>
   <link rel="stylesheet" href="assets/style.css" />
 </head>
-<body>
+<body class="<?php echo $isAuthenticated ? '' : 'restricted-page'; ?>">
   <header class="topbar">
     <a class="brand" href="#" aria-label="AirShare Home">
       <span class="brand-mark">AS</span>
@@ -22,11 +45,18 @@
       <a href="#text">Text</a>
       <a href="#files">Files</a>
       <a href="#">Feedback</a>
-      <a class="login" href="#">Internal Login</a>
+      <?php if ($isAuthenticated): ?>
+        <form class="logout-form" method="post">
+          <input type="hidden" name="action" value="logout" />
+          <button class="login nav-button" type="submit">Logout</button>
+        </form>
+      <?php else: ?>
+        <a class="login" href="#login">Internal Login</a>
+      <?php endif; ?>
     </nav>
   </header>
 
-  <main class="shell">
+  <main class="shell" <?php echo $isAuthenticated ? '' : 'aria-hidden="true"'; ?>>
     <aside class="side-nav" aria-label="Sections">
       <button class="side-icon active" data-tab="text" title="Text" aria-label="Open text panel">
         <span></span><span></span><span></span>
@@ -117,6 +147,30 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="assets/app.js"></script>
+  <?php if (!$isAuthenticated): ?>
+    <div class="auth-overlay" id="login">
+      <form class="auth-card" method="post" autocomplete="on">
+        <input type="hidden" name="action" value="login" />
+        <span class="auth-mark">AS</span>
+        <p class="eyebrow">Restricted Workspace</p>
+        <h2>Sign in to AirForShare</h2>
+        <p class="auth-copy">Use your internal email and password to open the realtime text and file share.</p>
+        <?php if ($loginError): ?>
+          <div class="auth-error" role="alert"><?php echo htmlspecialchars($loginError, ENT_QUOTES, 'UTF-8'); ?></div>
+        <?php endif; ?>
+        <label>
+          <span>Email</span>
+          <input type="email" name="email" placeholder="admin@airforshare.local" required autofocus />
+        </label>
+        <label>
+          <span>Password</span>
+          <input type="password" name="password" placeholder="Enter password" required />
+        </label>
+        <button class="btn auth-submit" type="submit">Login</button>
+      </form>
+    </div>
+  <?php else: ?>
+    <script type="module" src="assets/app.js"></script>
+  <?php endif; ?>
 </body>
 </html>

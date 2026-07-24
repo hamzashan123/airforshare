@@ -1,5 +1,8 @@
 <?php
+require_once __DIR__ . '/auth.php';
+
 header('Content-Type: application/json');
+airforshare_require_auth_json();
 
 $uploadDir = __DIR__ . '/assets/uploads/';
 $publicDir = 'assets/uploads/';

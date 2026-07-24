@@ -284,7 +284,8 @@ onSnapshot(textDocRef, (snapshot) => {
   setStatus("Firebase error", "error");
 });
 
-saveTextBtn.addEventListener("click", async () => {
+async function saveSharedText() {
+  if (isSavingText) return;
   isSavingText = true;
   saveTextBtn.disabled = true;
   setStatus("Saving...", "saving");
@@ -304,6 +305,16 @@ saveTextBtn.addEventListener("click", async () => {
     isSavingText = false;
     saveTextBtn.disabled = false;
   }
+}
+
+saveTextBtn.addEventListener("click", saveSharedText);
+
+document.addEventListener("keydown", (event) => {
+  const isSaveShortcut = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s";
+  if (!isSaveShortcut) return;
+
+  event.preventDefault();
+  saveSharedText();
 });
 
 copyBtn.addEventListener("click", async () => {
