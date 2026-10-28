@@ -52,6 +52,7 @@ const activeProjectLabel = $("#activeProjectLabel");
 const projectModal = $("#projectModal");
 const closeProjectModal = $("#closeProjectModal");
 const projectList = $("#projectList");
+const projectSearch = $("#projectSearch");
 const createProjectForm = $("#createProjectForm");
 const newProjectName = $("#newProjectName");
 const imageViewer = $("#imageViewer");
@@ -69,9 +70,23 @@ let pendingFiles = [];
 let imageGallery = [];
 let activeImageIndex = -1;
 let projects = [mainProject];
+let pinnedProjectIds = loadPinnedProjectIds();
 let unsubscribeText = null;
 let unsubscribeFiles = null;
 const renderedFiles = new Map();
+
+function loadPinnedProjectIds() {
+  try {
+    const savedPins = JSON.parse(localStorage.getItem("airforshare_pinned_projects") || "[]");
+    return new Set(Array.isArray(savedPins) ? savedPins : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function savePinnedProjectIds() {
+  localStorage.setItem("airforshare_pinned_projects", JSON.stringify([...pinnedProjectIds]));
+}
 
 function autoGrowTextArea() {
   textArea.style.height = "auto";
@@ -304,13 +319,32 @@ function resetProjectContent() {
 function renderProjectList() {
   projectList.replaceChildren();
 
-  projects.forEach((project) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "project-option";
-    button.classList.toggle("active", project.id === activeProject.id);
-    button.setAttribute("role", "option");
-    button.setAttribute("aria-selected", String(project.id === activeProject.id));
+  const searchValue = projectSearch.value.trim().toLowerCase();
+  const visibleProjects = projects
+    .filter((project) => project.name.toLowerCase().includes(searchValue))
+    .sort((a, b) => {
+      const pinDifference = Number(pinnedProjectIds.has(b.id)) - Number(pinnedProjectIds.has(a.id));
+      return pinDifference || a.name.localeCompare(b.name);
+    });
+
+  if (!visibleProjects.length) {
+    const empty = document.createElement("div");
+    empty.className = "project-list-empty";
+    empty.textContent = "No projects match your search.";
+    projectList.appendChild(empty);
+    return;
+  }
+
+  visibleProjects.forEach((project) => {
+    const item = document.createElement("div");
+    item.className = "project-option";
+    item.classList.toggle("active", project.id === activeProject.id);
+    item.classList.toggle("pinned", pinnedProjectIds.has(project.id));
+    item.setAttribute("role", "listitem");
+
+    const openButton = document.createElement("button");
+    openButton.type = "button";
+    openButton.className = "project-option-main";
 
     const mark = document.createElement("span");
     mark.className = "project-option-mark";
@@ -321,13 +355,36 @@ function renderProjectList() {
     const name = document.createElement("strong");
     name.textContent = project.name;
     const hint = document.createElement("small");
-    hint.textContent = project.id === activeProject.id ? "Currently selected" : "Open project";
+    hint.textContent = project.id === activeProject.id
+      ? "Currently selected"
+      : pinnedProjectIds.has(project.id) ? "Pinned project" : "Open project";
     details.append(name, hint);
 
-    button.append(mark, details);
-    button.addEventListener("click", () => selectProject(project));
-    projectList.appendChild(button);
+    const pinButton = document.createElement("button");
+    pinButton.type = "button";
+    pinButton.className = "project-pin";
+    pinButton.classList.toggle("active", pinnedProjectIds.has(project.id));
+    pinButton.dataset.pinProject = project.id;
+    pinButton.title = pinnedProjectIds.has(project.id) ? "Unpin project" : "Pin project to top";
+    pinButton.setAttribute("aria-label", `${pinButton.title}: ${project.name}`);
+    pinButton.addEventListener("click", () => toggleProjectPin(project.id));
+
+    openButton.append(mark, details);
+    openButton.addEventListener("click", () => selectProject(project));
+    item.append(openButton, pinButton);
+    projectList.appendChild(item);
   });
+}
+
+function toggleProjectPin(projectId) {
+  if (pinnedProjectIds.has(projectId)) {
+    pinnedProjectIds.delete(projectId);
+  } else {
+    pinnedProjectIds.add(projectId);
+  }
+  savePinnedProjectIds();
+  renderProjectList();
+  projectList.querySelector(`[data-pin-project="${projectId}"]`)?.focus();
 }
 
 function closeProjectSelector() {
@@ -339,8 +396,9 @@ function closeProjectSelector() {
 function openProjectSelector() {
   projectModal.hidden = false;
   document.body.classList.add("modal-open");
+  projectSearch.value = "";
   renderProjectList();
-  projectList.querySelector(".project-option.active")?.focus();
+  projectList.querySelector(".project-option.active .project-option-main")?.focus();
 }
 
 function subscribeToProject(project) {
@@ -414,6 +472,7 @@ document.querySelectorAll('a[href="#text"], a[href="#files"]').forEach((link) =>
 
 selectProjectBtn.addEventListener("click", openProjectSelector);
 closeProjectModal.addEventListener("click", closeProjectSelector);
+projectSearch.addEventListener("input", renderProjectList);
 projectModal.addEventListener("click", (event) => {
   if (event.target === projectModal) closeProjectSelector();
 });

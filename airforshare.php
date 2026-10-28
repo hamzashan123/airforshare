@@ -150,7 +150,11 @@ $isAuthenticated = airforshare_is_authenticated();
         <button id="closeProjectModal" class="modal-close" type="button" aria-label="Close project selector"></button>
       </div>
       <p class="project-dialog-copy">Each project has its own shared text and attachments.</p>
-      <div id="projectList" class="project-list" role="listbox" aria-label="Projects"></div>
+      <label class="project-search" for="projectSearch">
+        <span class="project-search-icon" aria-hidden="true"></span>
+        <input id="projectSearch" type="search" placeholder="Search projects" autocomplete="off" />
+      </label>
+      <div id="projectList" class="project-list" role="list" aria-label="Projects"></div>
       <form id="createProjectForm" class="create-project-form">
         <label for="newProjectName">New project</label>
         <div class="create-project-row">
