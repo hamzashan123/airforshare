@@ -18,6 +18,16 @@ PHP + CSS + JavaScript internal AirForShare-style app.
 3. In Firebase Console, enable **Cloud Firestore**.
 4. Add the Firestore rules from the ChatGPT response or your own authenticated rules.
 
+## Firestore paths used
+
+- `internal_share/text`
+- `internal_share/attachments/items/{fileId}`
+- `internal_share/projects/items/{projectId}`
+- `internal_share_projects/{projectId}`
+- `internal_share_projects/{projectId}/attachments/{fileId}`
+
+The existing text and attachments remain available as **Main Project**. New projects use isolated text and attachment paths.
+
 
 ## Important
 

@@ -42,6 +42,13 @@ $isAuthenticated = airforshare_is_authenticated();
       <span class="brand-name"><span>airfor</span><strong>share</strong></span>
     </a>
     <nav>
+      <button id="selectProjectBtn" class="project-selector" type="button" aria-haspopup="dialog" aria-controls="projectModal">
+        <span class="project-selector-icon" aria-hidden="true"></span>
+        <span class="project-selector-copy">
+          <strong>Select Project</strong>
+          <small id="activeProjectLabel">Main Project</small>
+        </span>
+      </button>
       <a href="#text">Text</a>
       <a href="#files">Files</a>
       <a href="#">Feedback</a>
@@ -73,7 +80,7 @@ $isAuthenticated = airforshare_is_authenticated();
     <section id="textPanel" class="panel active-panel">
       <div class="panel-head">
         <div>
-          <p class="eyebrow">Realtime Firebase</p>
+          <p class="eyebrow">Realtime Firebase · <span class="current-project-name">Main Project</span></p>
           <h1>Text</h1>
         </div>
         <div class="status-stack">
@@ -95,7 +102,7 @@ $isAuthenticated = airforshare_is_authenticated();
     <section id="filesPanel" class="panel">
       <div class="panel-head">
         <div>
-          <p class="eyebrow">Local asset storage</p>
+          <p class="eyebrow">Local asset storage · <span class="current-project-name">Main Project</span></p>
           <h1>Files</h1>
         </div>
         <div class="status-stack">
@@ -132,6 +139,27 @@ $isAuthenticated = airforshare_is_authenticated();
       <div id="fileList" class="file-list"></div>
     </section>
   </main>
+
+  <div id="projectModal" class="project-modal" hidden aria-modal="true" role="dialog" aria-labelledby="projectModalTitle">
+    <div class="project-dialog">
+      <div class="project-dialog-head">
+        <div>
+          <p class="eyebrow">Workspace</p>
+          <h2 id="projectModalTitle">Select Project</h2>
+        </div>
+        <button id="closeProjectModal" class="modal-close" type="button" aria-label="Close project selector"></button>
+      </div>
+      <p class="project-dialog-copy">Each project has its own shared text and attachments.</p>
+      <div id="projectList" class="project-list" role="listbox" aria-label="Projects"></div>
+      <form id="createProjectForm" class="create-project-form">
+        <label for="newProjectName">New project</label>
+        <div class="create-project-row">
+          <input id="newProjectName" name="projectName" type="text" maxlength="60" placeholder="Project name" required />
+          <button class="btn" type="submit">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <div id="imageViewer" class="image-viewer" hidden aria-modal="true" role="dialog" aria-label="Image gallery">
     <button id="closeImageViewer" class="viewer-close" type="button" aria-label="Close image viewer">&times;</button>

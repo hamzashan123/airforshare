@@ -24,8 +24,11 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const textDocRef = doc(db, "internal_share", "text");
-const filesColRef = collection(db, "internal_share", "attachments", "items");
+const projectsColRef = collection(db, "internal_share", "projects", "items");
+const mainProject = { id: "main", name: "Main Project", legacy: true };
+let activeProject = mainProject;
+let textDocRef = doc(db, "internal_share", "text");
+let filesColRef = collection(db, "internal_share", "attachments", "items");
 
 const $ = (selector) => document.querySelector(selector);
 const textArea = $("#sharedText");
@@ -44,6 +47,13 @@ const uploadProgress = $("#uploadProgress");
 const uploadProgressBar = $("#uploadProgressBar");
 const fileList = $("#fileList");
 const clearFilesBtn = $("#clearFilesBtn");
+const selectProjectBtn = $("#selectProjectBtn");
+const activeProjectLabel = $("#activeProjectLabel");
+const projectModal = $("#projectModal");
+const closeProjectModal = $("#closeProjectModal");
+const projectList = $("#projectList");
+const createProjectForm = $("#createProjectForm");
+const newProjectName = $("#newProjectName");
 const imageViewer = $("#imageViewer");
 const viewerImage = $("#viewerImage");
 const viewerImageName = $("#viewerImageName");
@@ -58,6 +68,9 @@ let isUploading = false;
 let pendingFiles = [];
 let imageGallery = [];
 let activeImageIndex = -1;
+let projects = [mainProject];
+let unsubscribeText = null;
+let unsubscribeFiles = null;
 const renderedFiles = new Map();
 
 function autoGrowTextArea() {
@@ -261,6 +274,133 @@ function iconTab(tabName) {
   filesPanel.classList.toggle("active-panel", tabName === "files");
 }
 
+function getProjectRefs(project) {
+  if (project.legacy) {
+    return {
+      text: doc(db, "internal_share", "text"),
+      files: collection(db, "internal_share", "attachments", "items")
+    };
+  }
+
+  return {
+    text: doc(db, "internal_share_projects", project.id),
+    files: collection(db, "internal_share_projects", project.id, "attachments")
+  };
+}
+
+function resetProjectContent() {
+  textArea.value = "";
+  renderLinkifiedText("");
+  requestAnimationFrame(autoGrowTextArea);
+  fileList.innerHTML = `<div class="empty">Loading project attachments...</div>`;
+  renderedFiles.clear();
+  imageGallery = [];
+  closeViewer();
+  setStatus("Loading...", "saving");
+  setUploadStatus("");
+  setUploadProgress(0, false);
+}
+
+function renderProjectList() {
+  projectList.replaceChildren();
+
+  projects.forEach((project) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "project-option";
+    button.classList.toggle("active", project.id === activeProject.id);
+    button.setAttribute("role", "option");
+    button.setAttribute("aria-selected", String(project.id === activeProject.id));
+
+    const mark = document.createElement("span");
+    mark.className = "project-option-mark";
+    mark.textContent = project.name.slice(0, 2).toUpperCase();
+
+    const details = document.createElement("span");
+    details.className = "project-option-details";
+    const name = document.createElement("strong");
+    name.textContent = project.name;
+    const hint = document.createElement("small");
+    hint.textContent = project.id === activeProject.id ? "Currently selected" : "Open project";
+    details.append(name, hint);
+
+    button.append(mark, details);
+    button.addEventListener("click", () => selectProject(project));
+    projectList.appendChild(button);
+  });
+}
+
+function closeProjectSelector() {
+  projectModal.hidden = true;
+  document.body.classList.remove("modal-open");
+  selectProjectBtn.focus();
+}
+
+function openProjectSelector() {
+  projectModal.hidden = false;
+  document.body.classList.add("modal-open");
+  renderProjectList();
+  projectList.querySelector(".project-option.active")?.focus();
+}
+
+function subscribeToProject(project) {
+  unsubscribeText?.();
+  unsubscribeFiles?.();
+
+  const refs = getProjectRefs(project);
+  textDocRef = refs.text;
+  filesColRef = refs.files;
+
+  unsubscribeText = onSnapshot(textDocRef, (snapshot) => {
+    if (isSavingText || project.id !== activeProject.id) return;
+    const data = snapshot.data();
+    textArea.value = data?.value || "";
+    renderLinkifiedText(textArea.value);
+    setStatus("");
+    requestAnimationFrame(autoGrowTextArea);
+  }, (error) => {
+    console.error(error);
+    setStatus("Firebase error", "error");
+  });
+
+  unsubscribeFiles = onSnapshot(query(filesColRef, orderBy("uploadedAt", "desc")), (snapshot) => {
+    if (project.id !== activeProject.id) return;
+    fileList.innerHTML = "";
+    renderedFiles.clear();
+
+    if (snapshot.empty) {
+      syncImageGallery([]);
+      renderEmptyState();
+      return;
+    }
+
+    syncImageGallery(snapshot.docs);
+    snapshot.docs.forEach((docSnap) => renderFile(docSnap.id, docSnap.data()));
+  }, (error) => {
+    console.error(error);
+    setUploadStatus("Firebase error", "error");
+  });
+}
+
+function selectProject(project, { announce = true, persist = true } = {}) {
+  if (isUploading || isSavingText) {
+    showToast("Please wait for the current save to finish");
+    return;
+  }
+
+  activeProject = project;
+  if (persist) localStorage.setItem("airforshare_project", project.id);
+  activeProjectLabel.textContent = project.name;
+  document.querySelectorAll(".current-project-name").forEach((label) => {
+    label.textContent = project.name;
+  });
+  resetProjectContent();
+  renderProjectList();
+  subscribeToProject(project);
+  if (!projectModal.hidden) closeProjectSelector();
+  if (announce) showToast(`${project.name} selected`);
+}
+
 document.querySelectorAll(".side-icon").forEach((btn) => {
   btn.addEventListener("click", () => iconTab(btn.dataset.tab));
 });
@@ -272,26 +412,64 @@ document.querySelectorAll('a[href="#text"], a[href="#files"]').forEach((link) =>
   });
 });
 
-// Firestore listener only reflects saved text from other users/devices.
-onSnapshot(textDocRef, (snapshot) => {
-  if (isSavingText) return;
-  const data = snapshot.data();
-  textArea.value = data?.value || "";
-  renderLinkifiedText(textArea.value);
-  requestAnimationFrame(autoGrowTextArea);
+selectProjectBtn.addEventListener("click", openProjectSelector);
+closeProjectModal.addEventListener("click", closeProjectSelector);
+projectModal.addEventListener("click", (event) => {
+  if (event.target === projectModal) closeProjectSelector();
+});
+
+createProjectForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const name = newProjectName.value.trim();
+  if (!name) return;
+
+  const submitButton = createProjectForm.querySelector("button");
+  submitButton.disabled = true;
+  try {
+    const projectRef = await addDoc(projectsColRef, {
+      name,
+      createdAt: serverTimestamp()
+    });
+    newProjectName.value = "";
+    selectProject({ id: projectRef.id, name });
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "Could not create project");
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
+onSnapshot(projectsColRef, (snapshot) => {
+  const remoteProjects = snapshot.docs
+    .map((docSnap) => ({ id: docSnap.id, name: docSnap.data().name || "Untitled Project" }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  projects = [mainProject, ...remoteProjects];
+  renderProjectList();
+
+  const savedProjectId = localStorage.getItem("airforshare_project");
+  const savedProject = projects.find((project) => project.id === savedProjectId);
+  if (savedProject && savedProject.id !== activeProject.id) {
+    selectProject(savedProject, { announce: false });
+  } else if (!projects.some((project) => project.id === activeProject.id)) {
+    selectProject(mainProject, { announce: false });
+  }
 }, (error) => {
   console.error(error);
-  setStatus("Firebase error", "error");
+  showToast("Could not load projects");
 });
+
+selectProject(mainProject, { announce: false, persist: false });
 
 async function saveSharedText() {
   if (isSavingText) return;
+  const targetTextRef = textDocRef;
   isSavingText = true;
   saveTextBtn.disabled = true;
   setStatus("Saving...", "saving");
 
   try {
-    await setDoc(textDocRef, {
+    await setDoc(targetTextRef, {
       value: textArea.value,
       updatedAt: serverTimestamp()
     }, { merge: true });
@@ -323,11 +501,12 @@ copyBtn.addEventListener("click", async () => {
 });
 
 clearTextBtn.addEventListener("click", async () => {
-  if (!confirm("Clear shared text for everyone?")) return;
+  if (!confirm(`Clear shared text in ${activeProject.name} for everyone?`)) return;
+  const targetTextRef = textDocRef;
   clearTextBtn.disabled = true;
   setStatus("Clearing...", "saving");
   try {
-    await setDoc(textDocRef, { value: "", updatedAt: serverTimestamp() }, { merge: true });
+    await setDoc(targetTextRef, { value: "", updatedAt: serverTimestamp() }, { merge: true });
     textArea.value = "";
     renderLinkifiedText("");
     autoGrowTextArea();
@@ -422,6 +601,7 @@ async function uploadFiles(files) {
     return;
   }
 
+  const targetFilesRef = filesColRef;
   isUploading = true;
   saveFilesBtn.disabled = true;
   fileInput.disabled = true;
@@ -441,7 +621,7 @@ async function uploadFiles(files) {
         setUploadProgress(overallPercent, true);
       });
 
-      await addDoc(filesColRef, {
+      await addDoc(targetFilesRef, {
         name: result.original_name,
         savedName: result.saved_name,
         url: result.url,
@@ -532,7 +712,7 @@ saveFilesBtn.addEventListener("click", () => uploadFiles(pendingFiles));
 
 function renderEmptyState() {
   if (!fileList.children.length) {
-    fileList.innerHTML = `<div class="empty">No saved attachments yet. Select files, then click Save Files.</div>`;
+    fileList.innerHTML = `<div class="empty">No attachments in this project yet.</div>`;
   }
 }
 
@@ -643,12 +823,13 @@ function renderFile(id, file) {
   actions.querySelector("button").addEventListener("click", () => deleteFile(id, file));
 
   card.append(preview, details, actions);
-  fileList.prepend(card);
+  fileList.appendChild(card);
   renderedFiles.set(id, card);
 }
 
 async function deleteFile(id, file) {
   if (!confirm(`Delete ${file.name}?`)) return;
+  const targetFilesRef = filesColRef;
   const formData = new FormData();
   formData.append("saved_name", file.savedName || "");
   formData.append("path", file.path || "");
@@ -659,7 +840,7 @@ async function deleteFile(id, file) {
     showToast(result.message || "Delete failed");
     return;
   }
-  await deleteDoc(doc(db, "internal_share", "attachments", "items", id));
+  await deleteDoc(doc(targetFilesRef, id));
   showToast("Attachment removed");
 }
 
@@ -671,46 +852,25 @@ imageViewer.addEventListener("click", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !projectModal.hidden) {
+    closeProjectSelector();
+    return;
+  }
   if (imageViewer.hidden) return;
   if (event.key === "Escape") closeViewer();
   if (event.key === "ArrowLeft") showAdjacentImage(-1);
   if (event.key === "ArrowRight") showAdjacentImage(1);
 });
 
-onSnapshot(query(filesColRef, orderBy("uploadedAt", "desc")), (snapshot) => {
-  if (snapshot.empty) {
-    fileList.innerHTML = "";
-    renderedFiles.clear();
-    syncImageGallery([]);
-    renderEmptyState();
-    return;
-  }
-
-  syncImageGallery(snapshot.docs);
-  snapshot.docChanges().forEach((change) => {
-    const id = change.doc.id;
-    if (change.type === "removed") {
-      const card = renderedFiles.get(id);
-      if (card) card.remove();
-      renderedFiles.delete(id);
-      renderEmptyState();
-    } else {
-      renderFile(id, change.doc.data());
-    }
-  });
-}, (error) => {
-  console.error(error);
-  setUploadStatus("Firebase error", "error");
-});
-
 clearFilesBtn.addEventListener("click", async () => {
-  if (!confirm("Delete all attachments from the assets folder and Firebase?")) return;
+  if (!confirm(`Delete all attachments in ${activeProject.name}?`)) return;
+  const targetFilesRef = filesColRef;
   clearFilesBtn.disabled = true;
   setUploadStatus("Clearing...", "saving");
   setUploadProgress(0, false);
 
   try {
-    const snapshot = await getDocs(filesColRef);
+    const snapshot = await getDocs(targetFilesRef);
     const files = snapshot.docs.map(docSnap => docSnap.data());
 
     const response = await fetch("clear_attachments.php", {
